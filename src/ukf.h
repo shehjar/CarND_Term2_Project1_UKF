@@ -56,6 +56,12 @@ public:
   ///* Radar measurement noise standard deviation radius change in m/s
   double std_radrd_ ;
 
+  ///* Radar measurement covariance matrix
+  MatrixXd R_radar;
+
+  ///* Lidar measurement covariance matrix
+  MatrixXd R_lidar;
+
   ///* Weights of sigma points
   VectorXd weights_;
 
@@ -108,6 +114,11 @@ public:
    * @param meas_package The measurement at k+1
    */
   void UpdateRadar(MeasurementPackage meas_package);
+
+  /**
+  * Generates sigma points
+  */
+  MatrixXd GenerateSigmaPoints();
 };
 
 #endif /* UKF_H */
