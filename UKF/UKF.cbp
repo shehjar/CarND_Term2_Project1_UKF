@@ -11,7 +11,7 @@
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters="..\data\sample-laser-radar-measurement-data-1.txt output.txt" />
+				<Option parameters="..\data\obj_pose-laser-radar-synthetic-input_edit.txt output.txt" />
 				<Compiler>
 					<Add option="-g" />
 				</Compiler>

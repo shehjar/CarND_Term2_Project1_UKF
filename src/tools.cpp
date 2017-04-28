@@ -15,23 +15,24 @@ VectorXd Tools::CalculateRMSE(const vector<VectorXd> &estimations,
   TODO:
     * Calculate the RMSE here.
   */
-  int dataCount = estimations.size();
-  int chkCount = ground_truth.size();
-  //std::cout<< "Data count = "<<dataCount<<std::endl;
-  //std::cout<<"ground truth count = "<< chkCount<< std::endl;
-  if((dataCount != chkCount)||(dataCount == 0)||(chkCount == 0)) return VectorXd::Zero(4);
-  VectorXd rmse = VectorXd::Zero(estimations[0].size());
+  VectorXd rmse(4);
+  rmse << 0,0,0,0;
 
-  //std::cout << "The size of rmse is "<<rmse.size();
-  //std::cout << "The data is "<<dataCount;
-  for (int i =0; i<dataCount; i++){
-    VectorXd diff = estimations[i] - ground_truth[i];
-    Eigen::ArrayXd diff_sq = diff.array();
-    rmse += diff_sq.square().matrix();
+  if ((estimations.size() < 0) &&(estimations.size() != ground_truth.size())){
+    std::cout<<"RMSE cannot be calculated, please check vector sizes\n";
+    return rmse;
   }
 
-  // Averaging and taking a square root of the result
-  rmse = rmse/dataCount;
+  for (size_t i = 0; i < estimations.size(); ++i){
+    VectorXd residual = estimations[i] - ground_truth[i];
+    residual = residual.array() * residual.array();
+    rmse += residual;
+  }
+
+  // Average rmse
+  rmse = rmse/estimations.size();
+
+  // Taking square root of individual elements
   rmse = rmse.array().sqrt();
 
   return rmse;
