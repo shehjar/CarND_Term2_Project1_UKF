@@ -32,10 +32,10 @@ UKF::UKF() {
   //                              0,0,100;
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 2.5;
+  std_a_ = 3;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 0.7;
+  std_yawdd_ = 3;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
@@ -123,7 +123,8 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     else if (meas_package.sensor_type_ == MeasurementPackage::LASER){
       double px = meas_package.raw_measurements_(0);
       double py = meas_package.raw_measurements_(1);
-      x_ << px, py, 0.0, 0.0, 0.0;
+      double phi = atan2(py,px);
+      x_ << px, py, 0.0, phi, 0.0;
     }
     // adjusting initial values close to zero:
     float eps = 0.001;
@@ -185,8 +186,7 @@ void UKF::Prediction(double delta_t) {
   MatrixXd diff = Xsig_pred_ - mean;
   /*Normalizing the angles*/
   for (int i=0; i< 2*n_aug_+1; i++){
-    double d_ang = atan2(sin(Xsig_pred_(3,i)),cos(Xsig_pred_(3,i))) - atan2(sin(mean(3,i)),cos(mean(3,i)));
-    diff(3,i) = atan2(sin(d_ang),cos(d_ang));
+    diff(3,i) = atan2(sin(Xsig_pred_(3,i)),cos(Xsig_pred_(3,i))) - atan2(sin(mean(3,i)),cos(mean(3,i)));
   }
   MatrixXd wt_rep = weights_c_.transpose().replicate(n_x_,1);
   MatrixXd wt_diff = wt_rep.array()*diff.array();
@@ -227,8 +227,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   MatrixXd diff_x = Xsig_pred_ - mean_x;
   /*Normalizing the angles*/
   for (int i=0; i<2*n_aug_+1;i++){
-    double d_ang = atan2(sin(Xsig_pred_(3,i)),cos(Xsig_pred_(3,i))) - atan2(sin(mean_x(3,i)),cos(mean_x(3,i)));
-    diff_x(3,i) = atan2(sin(d_ang),cos(d_ang));
+    diff_x(3,i) = atan2(sin(Xsig_pred_(3,i)),cos(Xsig_pred_(3,i))) - atan2(sin(mean_x(3,i)),cos(mean_x(3,i)));
   }
   Tc = diff_x*wt_diff_z.transpose();
 
@@ -243,10 +242,6 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   // Calculating NIS for LIDAR
   NIS_laser_ = meas_err.transpose()*Si*meas_err;
-  //cout<<"Laser Data \n";
-  //cout << "K size:" << K.size() << endl << K << endl;
-  //cout << "Tc size:" << Tc.size() << endl << Tc << endl;
-  //cout << "S size:" << S.size() << endl << S << endl;
 }
 
 /**
@@ -280,12 +275,10 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   S.fill(0.0);
   MatrixXd mean_z = Zpred.replicate(1,2*n_aug_+1);
   MatrixXd diff = Zsig - mean_z;
-  double d_ang =0.0;
+  //double d_ang =0.0;
   for (int i=0; i<2*n_aug_+1; i++){
-    d_ang = atan2(sin(Zsig(1,i)),cos(Zsig(1,i))) - atan2(sin(mean_z(1,i)),cos(mean_z(1,i)));;
-    diff(1,i) = atan2(sin(d_ang),cos(d_ang));
+    diff(1,i) = atan2(sin(Zsig(1,i)),cos(Zsig(1,i))) - atan2(sin(mean_z(1,i)),cos(mean_z(1,i)));
   }
-  //diff.row(1) = atan2(sin(Zsig.row(1)),cos(Zsig.row(1))) - atan2(sin(mean_z.row(1)),cos(mean_z.row(1)));  // normalizing angles
   MatrixXd wt_rep = weights_c_.transpose().replicate(3,1);
   MatrixXd wt_diff_z = wt_rep.array()*diff.array();
   S = wt_diff_z*diff.transpose();
@@ -293,13 +286,12 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
   //create matrix for cross correlation Tc
   MatrixXd Tc = MatrixXd(n_x_, 3);
+  Tc.fill(0.0);
   MatrixXd mean_x = x_.replicate(1, 2*n_aug_+1);
   MatrixXd diff_x = Xsig_pred_ - mean_x;
   for (int i=0; i<2*n_aug_+1; i++){
-    d_ang = atan2(sin(Xsig_pred_(3,i)),cos(Xsig_pred_(3,i))) - atan2(sin(mean_x(3,i)),cos(mean_x(3,i)));
-    diff_x(3,i) = atan2(sin(d_ang),cos(d_ang));
+    diff_x(3,i) = atan2(sin(Xsig_pred_(3,i)),cos(Xsig_pred_(3,i))) - atan2(sin(mean_x(3,i)),cos(mean_x(3,i)));
   }
-  //diff_x.row(3) = atan2(sin(Xsig_pred_.row(3)),cos(Xsig_pred_.row(3))) - atan2(sin(mean_x.row(3)),cos(mean_x.row(3)));    // normalizing angles
   Tc = diff_x*wt_diff_z.transpose();
 
   // Kalman gain Matrix
@@ -307,16 +299,12 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   MatrixXd K = Tc*Si;
   // Updating state and covariance matrix
   VectorXd z = meas_package.raw_measurements_;
-  x_ += K*(z - Zpred);
+  VectorXd meas_err = z - Zpred;
+  x_ += K*meas_err;
   P_ -= K*S*K.transpose();
 
   // Calculating NIS for RADAR
-  NIS_radar_ = (z - Zpred).transpose()*Si*(z - Zpred);
-
-  //cout<<"Radar Data \n";
-  //cout << "K size:" << K.size() << endl << K << endl;
-  //cout << "Tc size:" << Tc.size() << endl << Tc << endl;
-  //cout << "S size:" << S.size() << endl << S << endl;
+  NIS_radar_ = meas_err.transpose()*Si*meas_err;
 }
 
 MatrixXd UKF::GenerateSigmaPoints(){
