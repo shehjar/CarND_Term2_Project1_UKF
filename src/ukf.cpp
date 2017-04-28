@@ -23,16 +23,19 @@ UKF::UKF() {
 
   // initial state vector
   x_ = VectorXd(5);
-
+  x_.fill(0.0);
   // initial covariance matrix
   P_ = MatrixXd(5, 5);
   P_ = MatrixXd::Identity(5,5);     // setting covariance as Identity
+  P_.bottomRightCorner(3,3) << 100,0,0,
+                                0,100,0,
+                                0,0,100;
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 3;
+  std_a_ = 2.5;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 2;
+  std_yawdd_ = 3;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
@@ -78,7 +81,9 @@ UKF::UKF() {
     else
       weights_(i) = 0.5/(lambda_+n_aug_);
   }
-
+  //Initializing NIS
+  NIS_laser_ = 0.0;
+  NIS_radar_ = 0.0;
   // Initializing augmented sigma points matrix
   Xsig_pred_ = MatrixXd::Zero(n_x_, 2*n_aug_+1);
 }
@@ -107,12 +112,12 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       double vx = rho_dot*cos(phi);
       double vy = rho_dot*sin(phi);
       double v = sqrt(vx*vx + vy*vy);
-      x_ << px, py, v, phi, 0;
+      x_ << px, py, v, phi, 0.0;
     }
     else if (meas_package.sensor_type_ == MeasurementPackage::LASER){
       double px = meas_package.raw_measurements_(0);
       double py = meas_package.raw_measurements_(1);
-      x_ << px, py, 0, 0, 0;
+      x_ << px, py, 0.0, 0.0, 0.0;
     }
     // adjusting initial values close to zero:
     float eps = 0.001;
@@ -122,16 +127,18 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     }
     time_us_ = meas_package.timestamp_;
     is_initialized_ = true;
+    return;
   }
 
   //Prediction
-  double crit_t = 0.05;
+  // Breaking the time step into an array of critical time steps for integration
+  double crit_t = 0.005;
   double delta_t = (meas_package.timestamp_ - time_us_)/1000000.0;
   std::cout<<"delta_t = "<<delta_t<<std::endl;
-  std::cout<<"Current timestamp = "<<meas_package.timestamp_<<std::endl;
-  std::cout<<"Previous timestamp = "<<time_us_<<std::endl;
+  //std::cout<<"Current timestamp = "<<meas_package.timestamp_<<std::endl;
+  //std::cout<<"Previous timestamp = "<<time_us_<<std::endl;
   if (delta_t > crit_t){
-    double time_cnt = 0.0;
+    double time_cnt = crit_t;
     while (time_cnt < delta_t){
       Prediction(crit_t);
       time_cnt += crit_t;
@@ -143,7 +150,6 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   else{
     Prediction(delta_t);
   }
-
 
   // Measurement Update
   if (use_laser_){
@@ -282,6 +288,10 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   // Calculating NIS for LIDAR
   NIS_laser_ = meas_err.transpose()*Si*meas_err;
+  //cout<<"Laser Data \n";
+  //cout << "K size:" << K.size() << endl << K << endl;
+  //cout << "Tc size:" << Tc.size() << endl << Tc << endl;
+  //cout << "S size:" << S.size() << endl << S << endl;
 }
 
 /**
@@ -344,6 +354,11 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
   // Calculating NIS for RADAR
   NIS_radar_ = (z - Zpred).transpose()*Si*(z - Zpred);
+
+  //cout<<"Radar Data \n";
+  //cout << "K size:" << K.size() << endl << K << endl;
+  //cout << "Tc size:" << Tc.size() << endl << Tc << endl;
+  //cout << "S size:" << S.size() << endl << S << endl;
 }
 
 MatrixXd UKF::GenerateSigmaPoints(){
