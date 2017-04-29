@@ -156,6 +156,12 @@ int main(int argc, char* argv[]) {
   out_file_ << "py_ground_truth" << "\t";
   out_file_ << "vx_ground_truth" << "\t";
   out_file_ << "vy_ground_truth" << "\n";
+  // For debugging only -
+  //out_file_ << "px_pred" << "\t";
+  //out_file_ << "py_pred" << "\t";
+  //out_file_ << "v_pred" << "\t";
+  //out_file_ << "yaw_angle_pred" << "\t";
+  //out_file_ << "yaw_rate_pred" << "\n";
 
 
   for (size_t k = 0; k < number_of_measurements; ++k) {
@@ -204,6 +210,14 @@ int main(int argc, char* argv[]) {
     out_file_ << gt_pack_list[k].gt_values_(2) << "\t";
     out_file_ << gt_pack_list[k].gt_values_(3) << "\n";
 
+    // For debugging only - output predicted state
+    //VectorXd pred_state = ukf.Xsig_pred_*ukf.weights_m_;
+    //out_file_ <<pred_state(0)<<"\t";
+    //out_file_ <<pred_state(1)<<"\t";
+    //out_file_ <<pred_state(2)<<"\t";
+    //out_file_ <<pred_state(3)<<"\t";
+    //out_file_ <<pred_state(4)<<"\n";
+
     // convert ukf x vector to cartesian to compare to ground truth
     VectorXd ukf_x_cartesian_ = VectorXd(4);
 
@@ -216,8 +230,9 @@ int main(int argc, char* argv[]) {
 
     estimations.push_back(ukf_x_cartesian_);
     ground_truth.push_back(gt_pack_list[k].gt_values_);
-    cout<<"X = "<< ukf.x_<<endl;
-    cout<<"P = "<< ukf.P_<<endl;
+    // For debugging only -
+    //cout<<"X = "<< ukf.x_<<endl;
+    //cout<<"P = "<< ukf.P_<<endl;
   }
 
   // compute the accuracy (RMSE)

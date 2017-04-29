@@ -57,10 +57,10 @@ public:
   double std_radrd_ ;
 
   ///* Radar measurement covariance matrix
-  MatrixXd R_radar;
+  MatrixXd R_radar_;
 
   ///* Lidar measurement covariance matrix
-  MatrixXd R_lidar;
+  MatrixXd R_lidar_;
 
   ///* Weights of sigma points for mean evaluation
   VectorXd weights_m_;
@@ -82,6 +82,9 @@ public:
 
   ///* the current NIS for laser
   double NIS_laser_;
+
+  /////* troubleshooting
+  //VectorXd Zpred;
 
   /**
    * Constructor

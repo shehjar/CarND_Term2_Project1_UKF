@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from scipy.stats import chi2
 import matplotlib.pyplot as plt
-import math, os
+import os
 
 cwd = os.getcwd();
 dataFolder = os.path.join(cwd,'data')
@@ -25,25 +25,22 @@ with open(outFile) as f:
     data = pd.read_table(f, sep='\t', lineterminator='\n')
     
 # Start with plotting
-plt.figure(figsize=(15,15))
+plt.figure(figsize=(20,20))
 ax = plt.subplot(2,2,1)
 ax.set_title('XY Position')
-ax.scatter(data['px_ground_truth'], data['py_ground_truth'], color='orange')
-ax.scatter(data['px_state'], data['py_state'], color='b')
+p_gt = ax.scatter(data['px_ground_truth'], data['py_ground_truth'], color='orange', label = 'p_ground_truth')
+p_state = ax.scatter(data['px_state'], data['py_state'], color='b', label = 'p_state')
 #ax.scatter(data['px_measured'], data['py_measured'], color = 'r')
-ax.legend()
+ax.legend(handles = [p_gt,p_state])
 
 vx = data['v_state'] * np.cos(data['yaw_angle_state'])
 vy = data['v_state'] * np.sin(data['yaw_angle_state'])
 
 ax = plt.subplot(2,2,2)
 ax.set_title('XY Position')
-ax.scatter(data['vx_ground_truth'], data['vy_ground_truth'], color='orange')
-vel = ax.scatter(vx, vy, color='b')
-handles, labels = ax.get_legend_handles_labels()
-handles += [vel]
-labels += ['v_state']
-ax.legend(handles, labels)
+v_gt = ax.scatter(data['vx_ground_truth'], data['vy_ground_truth'], color='orange', label = 'v_ground_truth')
+vel = ax.scatter(vx, vy, color='b', label='v_state')
+ax.legend(handles=[v_gt,vel])
 
 # Getting NIS data and the chi^2 distribution value
 nis_radar = data.NIS[data.sensor_type=='radar'].as_matrix()
@@ -61,6 +58,15 @@ ax = plt.subplot(2,2,4)
 ax.set_title('LIDAR NIS')
 ax.plot(nis_lidar,'b')
 ax.plot(chi_lidar,'orange')
+
+# For debugging
+#ax = plt.subplot(2,3,5)
+#ax.set_title('Phi')
+#ax.plot(data.yaw_angle_state,'b')
+
+#ax = plt.subplot(2,3,6)
+#ax.set_title('Phi_dot')
+#ax.plot(data.yaw_rate_state,'b')
 
 plt.tight_layout()
 #plt.show()

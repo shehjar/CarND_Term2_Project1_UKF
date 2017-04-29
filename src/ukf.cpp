@@ -32,10 +32,10 @@ UKF::UKF() {
   //                              0,0,100;
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 3;
+  std_a_ = 2.4;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 3;
+  std_yawdd_ = 0.5;
 
   // Laser measurement noise standard deviation position1 in m
   std_laspx_ = 0.15;
@@ -68,13 +68,13 @@ UKF::UKF() {
   lambda_ = alpha*alpha*(n_aug_+kappa) - n_aug_;
 
   // Initializing measurement covariance matrices
-  R_radar = MatrixXd(3,3);
-  R_radar << std_radr_*std_radr_, 0,0,
+  R_radar_ = MatrixXd(3,3);
+  R_radar_ << std_radr_*std_radr_, 0,0,
               0, std_radphi_*std_radphi_, 0,
               0, 0, std_radrd_*std_radrd_;
 
-  R_lidar = MatrixXd(2,2);
-  R_lidar << std_laspx_*std_laspx_, 0,
+  R_lidar_ = MatrixXd(2,2);
+  R_lidar_ << std_laspx_*std_laspx_, 0,
               0, std_laspy_*std_laspy_;
 
   // Initializing weights for sigma points
@@ -128,7 +128,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     }
     // adjusting initial values close to zero:
     float eps = 0.001;
-    if ((fabs(x_(0)) < eps) || (fabs(x_(1)) < eps)) {
+    if ((fabs(x_(0)) < eps) && (fabs(x_(1)) < eps)) {
       x_(0) = eps;
       x_(1) = eps;
     }
@@ -141,7 +141,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   // Breaking the time step into an array of critical time steps for integration
   //double crit_t = 0.005;
   double delta_t = (meas_package.timestamp_ - time_us_)/1000000.0;
-  std::cout<<"delta_t = "<<delta_t<<std::endl;
+  //std::cout<<"delta_t = "<<delta_t<<std::endl;
   //std::cout<<"Current timestamp = "<<meas_package.timestamp_<<std::endl;
   //std::cout<<"Previous timestamp = "<<time_us_<<std::endl;
   Prediction(delta_t);
@@ -211,6 +211,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   //Predicted Mean
   VectorXd Zpred = Zsig*weights_m_;
+
   //Measurement Covariance Matrix S
   MatrixXd S = MatrixXd(2,2);
   S.fill(0.0);
@@ -219,7 +220,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   MatrixXd wt_rep = weights_c_.transpose().replicate(2,1);
   MatrixXd wt_diff_z = wt_rep.array()*diff.array();
   S = wt_diff_z*diff.transpose();
-  S += R_lidar;
+  S += R_lidar_;
 
   //create matrix for cross correlation Tc
   MatrixXd Tc = MatrixXd(n_x_, 2);
@@ -227,7 +228,8 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   MatrixXd diff_x = Xsig_pred_ - mean_x;
   /*Normalizing the angles*/
   for (int i=0; i<2*n_aug_+1;i++){
-    diff_x(3,i) = atan2(sin(Xsig_pred_(3,i)),cos(Xsig_pred_(3,i))) - atan2(sin(mean_x(3,i)),cos(mean_x(3,i)));
+    while (diff_x(3,i)> M_PI) diff_x(3,i)-=2.*M_PI;
+    while (diff_x(3,i)<-M_PI) diff_x(3,i)+=2.*M_PI;
   }
   Tc = diff_x*wt_diff_z.transpose();
 
@@ -261,45 +263,58 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   //create matrix for sigma points in measurement space
   MatrixXd Zsig = MatrixXd(3, 2 * n_aug_+1);
   for (int i = 0; i<2*n_aug_+1; i++){
-    VectorXd sig_point = Xsig_pred_.col(i);
-    double rho = sqrt(sig_point(0)*sig_point(0) + sig_point(1)*sig_point(1));
-    double theta = atan2(sig_point(1),sig_point(0));
-    double theta_dot = (sig_point(0)*cos(sig_point(3)) + sig_point(1)*sin(sig_point(3)))*sig_point(2)/rho;
-    Zsig.col(i) << rho, theta, theta_dot;
+    double p_x = Xsig_pred_(0,i);
+    double p_y = Xsig_pred_(1,i);
+    double v  = Xsig_pred_(2,i);
+    double yaw = Xsig_pred_(3,i);
+    double v1 = cos(yaw)*v;
+    double v2 = sin(yaw)*v;
+
+    Zsig(0,i) = sqrt(p_x*p_x + p_y*p_y);                        //r
+    Zsig(1,i) = atan2(p_y,p_x);                                 //phi
+    Zsig(2,i) = (p_x*v1 + p_y*v2 ) / sqrt(p_x*p_x + p_y*p_y);   //r_dot
   }
 
   // Calculate predicted mean measurement
   VectorXd Zpred = Zsig*weights_m_;
+
   // Calculate measurement covariance matrix S
   MatrixXd S = MatrixXd(3,3);
   S.fill(0.0);
   MatrixXd mean_z = Zpred.replicate(1,2*n_aug_+1);
-  MatrixXd diff = Zsig - mean_z;
-  //double d_ang =0.0;
+  MatrixXd diff_z = Zsig - mean_z;
+
+  //angle normalization
   for (int i=0; i<2*n_aug_+1; i++){
-    diff(1,i) = atan2(sin(Zsig(1,i)),cos(Zsig(1,i))) - atan2(sin(mean_z(1,i)),cos(mean_z(1,i)));
+    while (diff_z(1,i)> M_PI) diff_z(1,i)-=2.*M_PI;
+    while (diff_z(1,i)<-M_PI) diff_z(1,i)+=2.*M_PI;
   }
   MatrixXd wt_rep = weights_c_.transpose().replicate(3,1);
-  MatrixXd wt_diff_z = wt_rep.array()*diff.array();
-  S = wt_diff_z*diff.transpose();
-  S += R_radar;
+  MatrixXd wt_diff_z = wt_rep.array()*diff_z.array();
+  S = wt_diff_z*diff_z.transpose();
+  S += R_radar_;
 
   //create matrix for cross correlation Tc
   MatrixXd Tc = MatrixXd(n_x_, 3);
   Tc.fill(0.0);
   MatrixXd mean_x = x_.replicate(1, 2*n_aug_+1);
   MatrixXd diff_x = Xsig_pred_ - mean_x;
-  for (int i=0; i<2*n_aug_+1; i++){
-    diff_x(3,i) = atan2(sin(Xsig_pred_(3,i)),cos(Xsig_pred_(3,i))) - atan2(sin(mean_x(3,i)),cos(mean_x(3,i)));
+  for (int i=0; i<2*n_aug_+1; i++){             // Angle Normalization
+    while (diff_x(3,i)> M_PI) diff_x(3,i)-=2.*M_PI;
+    while (diff_x(3,i)<-M_PI) diff_x(3,i)+=2.*M_PI;
   }
   Tc = diff_x*wt_diff_z.transpose();
 
   // Kalman gain Matrix
   MatrixXd Si = S.inverse();
   MatrixXd K = Tc*Si;
+
   // Updating state and covariance matrix
   VectorXd z = meas_package.raw_measurements_;
   VectorXd meas_err = z - Zpred;
+  //Normalizing angles
+  while (meas_err(1)> M_PI) meas_err(1)-=2.*M_PI;
+  while (meas_err(1)<-M_PI) meas_err(1)+=2.*M_PI;
   x_ += K*meas_err;
   P_ -= K*S*K.transpose();
 
@@ -335,12 +350,11 @@ MatrixXd UKF::GenerateSigmaPoints(){
 
 void UKF::PredictSigmaPoints(MatrixXd Xsig_, double delta_t){
   // Evaluating sigma points through the non-linear process model
-  VectorXd delta_x_ = VectorXd(n_x_);
-  delta_x_.fill(0.0);
+  VectorXd delta_x = VectorXd(n_x_);
+  //delta_x_.fill(0.0);
   VectorXd err = VectorXd(n_x_);
-  err.fill(0.0);
+  //err.fill(0.0);
   double delta_t_2 = delta_t*delta_t;
-  double tol = 0.001;
   for(int i=0; i<2*n_aug_+1; ++i){
     VectorXd point = Xsig_.col(i);
     //double px = point(0);
@@ -363,17 +377,19 @@ void UKF::PredictSigmaPoints(MatrixXd Xsig_, double delta_t){
           0.5*delta_t_2*phi_err,
           delta_t*phi_err;
 
-    if(fabs(phi_dot < tol)){
-      delta_x_(0) = v*cos_phi*delta_t;
-      delta_x_(1) = v*sin_phi*delta_t;
+    delta_x.fill(0.0);
+    if(fabs(phi_dot) < 0.001){
+      delta_x(0) = v*cos_phi*delta_t;
+      delta_x(1) = v*sin_phi*delta_t;
     }
     else{
       double v_by_phidot = v/phi_dot;
-      delta_x_(0) = v_by_phidot*(sin_phi_next - sin_phi);
-      delta_x_(1) = v_by_phidot*(-cos_phi_next + cos_phi);
+      delta_x(0) = (sin_phi_next - sin_phi)*v_by_phidot;
+      delta_x(1) = (-cos_phi_next + cos_phi)*v_by_phidot;
     }
-    delta_x_(3) = delta_t*phi_dot;
+    delta_x(3) = delta_t*phi_dot;
+
     // Evaluate predicted sigma points
-    Xsig_pred_.col(i) = point.head(n_x_) + delta_x_ + err;
+    Xsig_pred_.col(i) = point.head(n_x_) + delta_x + err;
   }
 }
