@@ -62,6 +62,9 @@ public:
   ///* Lidar measurement covariance matrix
   MatrixXd R_lidar_;
 
+  ///* Measurement Transformation Matrix
+  MatrixXd H_lidar_;
+
   ///* Weights of sigma points for mean evaluation
   VectorXd weights_m_;
 
@@ -127,9 +130,14 @@ public:
   MatrixXd GenerateSigmaPoints();
 
   /**
-  * Generates sigma points
+  * Predict sigma points
   */
   void PredictSigmaPoints(MatrixXd Xsig, double delta_t);
+
+  /**
+  * Normalize angles
+  */
+  void AngleNormalization(double &ang);
 };
 
 #endif /* UKF_H */

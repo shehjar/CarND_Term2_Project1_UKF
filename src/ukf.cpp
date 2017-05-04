@@ -92,6 +92,10 @@ UKF::UKF() {
   // Initializing predicted sigma points matrix
   Xsig_pred_ = MatrixXd(n_x_, 2*n_aug_+1);
   Xsig_pred_.fill(0.0);
+  // State vector to measurement space transformation matrix H_lidar_
+  H_lidar_ = MatrixXd(2,n_x_);
+  H_lidar_ << 1, 0, 0, 0, 0,
+        0, 1, 0, 0, 0;
 }
 
 UKF::~UKF() {}
@@ -181,12 +185,15 @@ void UKF::Prediction(double delta_t) {
 
   // Predict the next state through weighted mean
   x_ = Xsig_pred_*weights_m_;
+
   //Predict the covariance matrix through weighted mean
   MatrixXd mean = x_.replicate(1,2*n_aug_+1);
   MatrixXd diff = Xsig_pred_ - mean;
+
   /*Normalizing the angles*/
   for (int i=0; i< 2*n_aug_+1; i++){
-    diff(3,i) = atan2(sin(Xsig_pred_(3,i)),cos(Xsig_pred_(3,i))) - atan2(sin(mean(3,i)),cos(mean(3,i)));
+    AngleNormalization(diff(3,i));
+    //diff(3,i) = atan2(sin(Xsig_pred_(3,i)),cos(Xsig_pred_(3,i))) - atan2(sin(mean(3,i)),cos(mean(3,i)));
   }
   MatrixXd wt_rep = weights_c_.transpose().replicate(n_x_,1);
   MatrixXd wt_diff = wt_rep.array()*diff.array();
@@ -207,40 +214,19 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the lidar NIS.
   */
-  MatrixXd Zsig = Xsig_pred_.topRows(2);
+  // Lidar measurement update is done via Extended Kalman equations
+  // as the measurement of sensor has a linear relationship with state vector
 
-  //Predicted Mean
-  VectorXd Zpred = Zsig*weights_m_;
-
-  //Measurement Covariance Matrix S
-  MatrixXd S = MatrixXd(2,2);
-  S.fill(0.0);
-  MatrixXd mean_z = Zpred.replicate(1,2*n_aug_+1);
-  MatrixXd diff = Zsig - mean_z;
-  MatrixXd wt_rep = weights_c_.transpose().replicate(2,1);
-  MatrixXd wt_diff_z = wt_rep.array()*diff.array();
-  S = wt_diff_z*diff.transpose();
-  S += R_lidar_;
-
-  //create matrix for cross correlation Tc
-  MatrixXd Tc = MatrixXd(n_x_, 2);
-  MatrixXd mean_x = x_.replicate(1, 2*n_aug_+1);
-  MatrixXd diff_x = Xsig_pred_ - mean_x;
-  /*Normalizing the angles*/
-  for (int i=0; i<2*n_aug_+1;i++){
-    while (diff_x(3,i)> M_PI) diff_x(3,i)-=2.*M_PI;
-    while (diff_x(3,i)<-M_PI) diff_x(3,i)+=2.*M_PI;
-  }
-  Tc = diff_x*wt_diff_z.transpose();
-
-  // Kalman gain Matrix
-  MatrixXd Si = S.inverse();
-  MatrixXd K = Tc*Si;
-  // Updating state and covariance matrix
   VectorXd z = meas_package.raw_measurements_;
-  VectorXd meas_err = z - Zpred;
+  VectorXd meas_err = z - H_lidar_*x_;
+  MatrixXd Ht = H_lidar_.transpose();
+  MatrixXd P_Ht = P_*Ht;
+  MatrixXd S = H_lidar_*P_Ht + R_lidar_;
+  MatrixXd Si = S.inverse();
+  MatrixXd K = P_Ht*Si;
+
   x_ += K*meas_err;
-  P_ -= K*S*K.transpose();
+  P_ -= K*H_lidar_*P_;
 
   // Calculating NIS for LIDAR
   NIS_laser_ = meas_err.transpose()*Si*meas_err;
@@ -259,7 +245,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
   You'll also need to calculate the radar NIS.
   */
-  //n_z = 3;
+
   //create matrix for sigma points in measurement space
   MatrixXd Zsig = MatrixXd(3, 2 * n_aug_+1);
   for (int i = 0; i<2*n_aug_+1; i++){
@@ -286,8 +272,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
   //angle normalization
   for (int i=0; i<2*n_aug_+1; i++){
-    while (diff_z(1,i)> M_PI) diff_z(1,i)-=2.*M_PI;
-    while (diff_z(1,i)<-M_PI) diff_z(1,i)+=2.*M_PI;
+    AngleNormalization(diff_z(1,i));
   }
   MatrixXd wt_rep = weights_c_.transpose().replicate(3,1);
   MatrixXd wt_diff_z = wt_rep.array()*diff_z.array();
@@ -300,8 +285,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   MatrixXd mean_x = x_.replicate(1, 2*n_aug_+1);
   MatrixXd diff_x = Xsig_pred_ - mean_x;
   for (int i=0; i<2*n_aug_+1; i++){             // Angle Normalization
-    while (diff_x(3,i)> M_PI) diff_x(3,i)-=2.*M_PI;
-    while (diff_x(3,i)<-M_PI) diff_x(3,i)+=2.*M_PI;
+    AngleNormalization(diff_x(3,i));
   }
   Tc = diff_x*wt_diff_z.transpose();
 
@@ -313,8 +297,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   VectorXd z = meas_package.raw_measurements_;
   VectorXd meas_err = z - Zpred;
   //Normalizing angles
-  while (meas_err(1)> M_PI) meas_err(1)-=2.*M_PI;
-  while (meas_err(1)<-M_PI) meas_err(1)+=2.*M_PI;
+  AngleNormalization(meas_err(1));
   x_ += K*meas_err;
   P_ -= K*S*K.transpose();
 
@@ -392,4 +375,9 @@ void UKF::PredictSigmaPoints(MatrixXd Xsig_, double delta_t){
     // Evaluate predicted sigma points
     Xsig_pred_.col(i) = point.head(n_x_) + delta_x + err;
   }
+}
+
+void UKF::AngleNormalization(double &angle){
+  while (angle> M_PI) angle -=2.*M_PI;
+  while (angle<-M_PI) angle +=2.*M_PI;
 }
